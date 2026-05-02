@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+release/
+*.crx
+
+# Chrome extension private keys and signing material
+*.pem
+*.key
+
+# Local browser profiles and sessions
+.chrome-profile*/
+
+# Test and coverage output
+coverage/
+test-results/
+playwright-report/
+
+# Tool caches
+.cache/
+.tmp/
+tmp/
+.playwright-mcp/
+
+# Logs
+*.log
+
+# Environment and secrets
+.env
+.env.*
+
+# OS/editor noise
+.DS_Store
+Thumbs.db

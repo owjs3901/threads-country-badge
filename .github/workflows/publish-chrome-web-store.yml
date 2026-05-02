@@ -1,0 +1,175 @@
+name: Changepacks & Chrome Web Store
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publish after upload. Keep false for the first dry run."
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Quality Gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Check manifest version
+        run: bun run manifest:check
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Test
+        run: bun run test
+
+      - name: Build extension
+        run: bun run build
+
+  changepacks:
+    if: github.event_name != 'workflow_dispatch'
+    name: Changepacks
+    needs: quality
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      changepacks: ${{ steps.changepacks.outputs.changepacks }}
+      release_assets_urls: ${{ steps.changepacks.outputs.release_assets_urls }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Run Changepacks
+        id: changepacks
+        uses: changepacks/action@v0.1.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          create_release: true
+          publish: true
+          publish_options: -l node
+
+  publish-chrome-web-store:
+    name: Publish Chrome Web Store
+    needs: changepacks
+    if: >-
+      github.event_name == 'push' &&
+      needs.changepacks.result == 'success' &&
+      contains(needs.changepacks.outputs.changepacks, 'package.json')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Read committed extension version
+        run: |
+          VERSION="$(bun -e \"console.log((await import('./package.json')).default.version)\")"
+          echo "EXTENSION_VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "Extension version: $VERSION"
+
+      - name: Build extension
+        run: bun run build
+
+      - name: Package Web Store zip
+        run: bun run package
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: threads-country-badge-${{ env.EXTENSION_VERSION }}
+          path: release/threads-country-badge-${{ env.EXTENSION_VERSION }}.zip
+          if-no-files-found: error
+
+      - name: Upload and publish to Chrome Web Store
+        uses: mnao305/chrome-extension-upload@v6.0.0
+        with:
+          file-path: release/threads-country-badge-${{ env.EXTENSION_VERSION }}.zip
+          extension-id: ${{ secrets.CHROME_EXTENSION_ID }}
+          client-id: ${{ secrets.GOOGLE_CLIENT_ID }}
+          client-secret: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          refresh-token: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+          publish: true
+
+  dry-run-chrome-web-store:
+    name: Manual Chrome Web Store Upload
+    if: github.event_name == 'workflow_dispatch'
+    needs: quality
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Read committed extension version
+        run: |
+          VERSION="$(bun -e \"console.log((await import('./package.json')).default.version)\")"
+          echo "EXTENSION_VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "Extension version: $VERSION"
+
+      - name: Build extension
+        run: bun run build
+
+      - name: Package Web Store zip
+        run: bun run package
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: threads-country-badge-${{ env.EXTENSION_VERSION }}
+          path: release/threads-country-badge-${{ env.EXTENSION_VERSION }}.zip
+          if-no-files-found: error
+
+      - name: Upload to Chrome Web Store
+        uses: mnao305/chrome-extension-upload@v6.0.0
+        with:
+          file-path: release/threads-country-badge-${{ env.EXTENSION_VERSION }}.zip
+          extension-id: ${{ secrets.CHROME_EXTENSION_ID }}
+          client-id: ${{ secrets.GOOGLE_CLIENT_ID }}
+          client-secret: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          refresh-token: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+          publish: ${{ inputs.publish }}

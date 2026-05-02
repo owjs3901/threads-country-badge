@@ -1,0 +1,11 @@
+{
+  "ignore": ["**/node_modules/**", "dist/**", "coverage/**"],
+  "baseBranch": "main",
+  "latestPackage": "package.json",
+  "updateOn": {
+    "package.json": ["src/manifest.json"]
+  },
+  "publish": {
+    "node": "bun run manifest:check && echo 'Ready for Chrome Web Store publish'"
+  }
+}
