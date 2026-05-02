@@ -78,7 +78,7 @@ jobs:
 
       - name: Run Changepacks
         id: changepacks
-        uses: changepacks/action@v0.1.0
+        uses: changepacks/action@main
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           create_release: true
